@@ -13,6 +13,16 @@ amp's own web control page at `https://<amp-ip>/webclient/`).
 - **Now playing metadata** - track title, artist, album, album art,
   duration, and live playback position, when something is actively
   streaming through the amp (Qobuz Connect, AirPlay, Bluetooth, etc.)
+- **Transport controls** - play/pause, next track, previous track, and
+  seeking to a specific position in the track
+
+**Note on play/pause:** the amp's API only exposes a single toggle
+command (confirmed via captured traffic - there is no separate "play"
+command, only "pause" which flips the current state). Both the Play and
+Pause buttons in Home Assistant send this same toggle, so they'll work
+correctly most of the time, but pressing "Play" while already playing
+will pause it instead of being a no-op. This is a limitation of the
+amp's own API, not something this integration can work around.
 
 ## What this does NOT support
 
@@ -23,10 +33,6 @@ amp's own web control page at `https://<amp-ip>/webclient/`).
   mechanism. If you need to switch inputs from Home Assistant, you'll
   need an IR blaster (e.g. Broadlink, ESPHome) sending the amp's remote
   IR codes instead.
-- **Playback transport controls** (play/pause/next/previous). The amp's
-  API does expose a `player:player/control` path for this, but the exact
-  values it expects haven't been captured/confirmed yet - contributions
-  welcome if you can grab that traffic.
 
 ## How this works
 

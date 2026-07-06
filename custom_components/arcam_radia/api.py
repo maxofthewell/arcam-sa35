@@ -27,6 +27,12 @@ PATH_VOLUME = "player:volume"
 PATH_MUTE = "settings:/mediaPlayer/mute"
 PATH_NOW_PLAYING = "player:player/data/value"
 PATH_PLAY_TIME = "player:player/data/playTime"
+PATH_PLAYER_CONTROL = "player:player/control"
+
+CONTROL_PLAY_PAUSE_TOGGLE = "pause"
+CONTROL_NEXT = "next"
+CONTROL_PREVIOUS = "previous"
+CONTROL_SEEK = "seekTime"
 
 POWER_ON = "online"
 POWER_STANDBY = "networkStandby"
@@ -67,6 +73,23 @@ class ArcamRadiaClient:
         except aiohttp.ClientError as err:
             raise ArcamRadiaApiError(f"getData {path} failed: {err}") from err
 
+    async def _post(self, payload: dict[str, Any]) -> bool:
+        try:
+            async with self._session.post(
+                f"{self._base_url}/setData", json=payload, ssl=False
+            ) as resp:
+                if resp.status != 200:
+                    raise ArcamRadiaApiError(
+                        f"setData {payload.get('path')} returned HTTP {resp.status}"
+                    )
+                result = await resp.json(content_type=None)
+                _LOGGER.debug("setData %s -> %s", payload, result)
+                return bool(result)
+        except aiohttp.ClientError as err:
+            raise ArcamRadiaApiError(
+                f"setData {payload.get('path')} failed: {err}"
+            ) from err
+
     async def _set_data(self, path: str, value_type: str, value: Any) -> bool:
         payload = {
             "path": path,
@@ -74,19 +97,17 @@ class ArcamRadiaClient:
             "value": {"type": value_type, value_type: value},
             "_nocache": self._nocache(),
         }
-        try:
-            async with self._session.post(
-                f"{self._base_url}/setData", json=payload, ssl=False
-            ) as resp:
-                if resp.status != 200:
-                    raise ArcamRadiaApiError(
-                        f"setData {path} returned HTTP {resp.status}"
-                    )
-                result = await resp.json(content_type=None)
-                _LOGGER.debug("setData %s=%s -> %s", path, value, result)
-                return bool(result)
-        except aiohttp.ClientError as err:
-            raise ArcamRadiaApiError(f"setData {path} failed: {err}") from err
+        return await self._post(payload)
+
+    async def _activate(self, path: str, control: str) -> bool:
+        """Send a role=activate control command, e.g. player transport controls."""
+        payload = {
+            "path": path,
+            "role": "activate",
+            "value": {"control": control},
+            "_nocache": self._nocache(),
+        }
+        return await self._post(payload)
 
     @staticmethod
     def _unwrap(response: Any) -> Any:
@@ -216,7 +237,27 @@ class ArcamRadiaClient:
 
         return result
 
-    async def get_play_time(self) -> int:
+    async def toggle_play_pause(self) -> bool:
+        """Toggle play/pause. The amp's API only exposes a single 'pause'
+        control (confirmed via captured traffic) which toggles playback
+        state - there is no separate 'play' command."""
+        return await self._activate(PATH_PLAYER_CONTROL, CONTROL_PLAY_PAUSE_TOGGLE)
+
+    async def next_track(self) -> bool:
+        return await self._activate(PATH_PLAYER_CONTROL, CONTROL_NEXT)
+
+    async def previous_track(self) -> bool:
+        return await self._activate(PATH_PLAYER_CONTROL, CONTROL_PREVIOUS)
+
+    async def seek_to(self, position_ms: int) -> bool:
+        """Seek to an absolute position in the current track, in milliseconds."""
+        payload = {
+            "path": PATH_PLAYER_CONTROL,
+            "role": "activate",
+            "value": {"control": CONTROL_SEEK, "time": int(position_ms)},
+            "_nocache": self._nocache(),
+        }
+        return await self._post(payload)
         """Return current playback position in milliseconds.
 
         Confirmed shape (captured from a pollQueue push event, same

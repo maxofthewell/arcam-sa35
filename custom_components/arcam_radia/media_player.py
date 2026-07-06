@@ -56,6 +56,11 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
         | MediaPlayerEntityFeature.VOLUME_MUTE
         | MediaPlayerEntityFeature.TURN_ON
         | MediaPlayerEntityFeature.TURN_OFF
+        | MediaPlayerEntityFeature.PLAY
+        | MediaPlayerEntityFeature.PAUSE
+        | MediaPlayerEntityFeature.NEXT_TRACK
+        | MediaPlayerEntityFeature.PREVIOUS_TRACK
+        | MediaPlayerEntityFeature.SEEK
     )
     _attr_should_poll = True
 
@@ -89,7 +94,8 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
             self._attr_media_title = None
             self._attr_media_artist = None
             self._attr_media_album_name = None
-            self._attr_entity_picture = None
+            self._attr_media_image_url = None
+            self._attr_media_image_remotely_accessible = False
             self._attr_media_duration = None
             self._attr_media_position = None
             self._attr_media_position_updated_at = None
@@ -106,7 +112,10 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
                     self._attr_media_title = now_playing.get("title")
                     self._attr_media_artist = now_playing.get("artist")
                     self._attr_media_album_name = now_playing.get("album")
-                    self._attr_entity_picture = now_playing.get("icon")
+                    icon_url = now_playing.get("icon")
+                    if icon_url:
+                        self._attr_media_image_url = icon_url
+                        self._attr_media_image_remotely_accessible = True
                     self._attr_app_name = now_playing.get("source_name")
 
                     duration_ms = now_playing.get("duration_ms")
@@ -155,3 +164,23 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
     async def async_mute_volume(self, mute: bool) -> None:
         await self._client.set_mute(mute)
         self._attr_is_volume_muted = mute
+
+    async def async_media_play(self) -> None:
+        # The amp's API only exposes a single toggle command - see
+        # ArcamRadiaClient.toggle_play_pause for details.
+        await self._client.toggle_play_pause()
+
+    async def async_media_pause(self) -> None:
+        await self._client.toggle_play_pause()
+
+    async def async_media_next_track(self) -> None:
+        await self._client.next_track()
+
+    async def async_media_previous_track(self) -> None:
+        await self._client.previous_track()
+
+    async def async_media_seek(self, position: float) -> None:
+        position_ms = int(position * 1000)
+        await self._client.seek_to(position_ms)
+        self._attr_media_position = int(position)
+        self._attr_media_position_updated_at = dt_util.utcnow()
