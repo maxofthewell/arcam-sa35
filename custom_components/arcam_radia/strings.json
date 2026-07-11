@@ -6,7 +6,8 @@
         "description": "Enter the IP address or hostname of your Arcam Radia amp (SA35/SA45/ST25). Only power, volume, and mute control are supported - input switching is not exposed by the amp's local API.",
         "data": {
           "host": "Host (IP address)",
-          "max_volume": "Maximum volume value used by the amp (default 100)"
+          "max_volume": "Maximum volume value used by the amp (default 100)",
+          "keep_awake": "Keep amp awake (prevents auto-standby while on)"
         }
       }
     },

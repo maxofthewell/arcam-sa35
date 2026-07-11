@@ -1,7 +1,7 @@
 {
   "domain": "arcam_radia",
   "name": "Arcam Radia",
-  "version": "0.4.1",
+  "version": "0.7.0",
   "documentation": "https://github.com/maxofthewell/arcam-sa35",
   "issue_tracker": "https://github.com/maxofthewell/arcam-sa35/issues",
   "codeowners": ["@maxofthewell"],

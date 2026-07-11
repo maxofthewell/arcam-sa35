@@ -13,7 +13,13 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ArcamRadiaApiError, ArcamRadiaClient
-from .const import CONF_MAX_VOLUME, DEFAULT_MAX_VOLUME, DOMAIN
+from .const import (
+    CONF_KEEP_AWAKE,
+    CONF_MAX_VOLUME,
+    DEFAULT_KEEP_AWAKE,
+    DEFAULT_MAX_VOLUME,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -21,6 +27,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required("host"): str,
         vol.Optional(CONF_MAX_VOLUME, default=DEFAULT_MAX_VOLUME): int,
+        vol.Optional(CONF_KEEP_AWAKE, default=DEFAULT_KEEP_AWAKE): bool,
     }
 )
 

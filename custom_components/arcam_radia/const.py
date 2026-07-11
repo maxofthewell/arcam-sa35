@@ -5,4 +5,7 @@ DOMAIN = "arcam_radia"
 CONF_MAX_VOLUME = "max_volume"
 DEFAULT_MAX_VOLUME = 100
 
-PLATFORMS = ["media_player"]
+CONF_KEEP_AWAKE = "keep_awake"
+DEFAULT_KEEP_AWAKE = False
+
+PLATFORMS = ["media_player", "button"]

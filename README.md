@@ -15,6 +15,23 @@ amp's own web control page at `https://<amp-ip>/webclient/`).
   streaming through the amp (Qobuz Connect, AirPlay, Bluetooth, etc.)
 - **Transport controls** - play/pause, next track, previous track, and
   seeking to a specific position in the track
+- **Input/source selection** - switch between all physical inputs (Phono
+  MM/MC, Analogue 1-3, Digital 1-4, ARC/eARC, Bluetooth) and see the
+  current input. This uses the documented Arcam binary control protocol
+  on TCP port 50000, separate from the JSON API used for everything else.
+- **Display brightness button** - a button entity that cycles the amp's
+  front-panel display brightness (bright -> dim -> off), mirroring the
+  remote's brightness button. It's a cycle rather than a direct on/off
+  because the amp only exposes brightness as a cycle and doesn't report
+  the current level back.
+- **Device info** - the amp's model and firmware versions (network, host
+  MCU, ARC) are read via the binary protocol and shown in the Home
+  Assistant device page.
+- **Optional keep-awake** - a setup toggle (off by default) that sends a
+  periodic heartbeat while the amp is on, resetting its auto-standby
+  timer so it won't sleep on its own. Only takes effect while the amp is
+  already on - it never wakes a sleeping amp. Note this will increase
+  idle power draw, so leave it off unless you specifically need it.
 
 **Note on play/pause:** the amp's API only exposes a single toggle
 command (confirmed via captured traffic - there is no separate "play"
@@ -26,13 +43,12 @@ amp's own API, not something this integration can work around.
 
 ## What this does NOT support
 
-- **Input/source switching.** The physical inputs (Phono, AV1-4, Balanced,
-  etc.) are not exposed anywhere in the amp's local API - this was
-  confirmed by inspecting the web client's own JavaScript bundle, which
-  contains no references to any physical input names or switching
-  mechanism. If you need to switch inputs from Home Assistant, you'll
-  need an IR blaster (e.g. Broadlink, ESPHome) sending the amp's remote
-  IR codes instead.
+- **Net/USB as a directly selectable source.** The amp reports "Net/USB"
+  as the current input when you're streaming (Qobuz, AirPlay, Bluetooth
+  app streaming, etc.), and this integration will display that correctly.
+  But you can't *switch to* Net/USB with a single command - it becomes
+  active when you start streaming to the amp from an app, so it's shown
+  as current-state-only rather than in the selectable source list.
 
 ## How this works
 

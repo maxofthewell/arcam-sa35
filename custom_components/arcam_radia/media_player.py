@@ -15,7 +15,14 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from .api import POWER_ON, POWER_STANDBY, ArcamRadiaApiError, ArcamRadiaClient
-from .const import CONF_MAX_VOLUME, DEFAULT_MAX_VOLUME, DOMAIN
+from .const import (
+    CONF_KEEP_AWAKE,
+    CONF_MAX_VOLUME,
+    DEFAULT_KEEP_AWAKE,
+    DEFAULT_MAX_VOLUME,
+    DOMAIN,
+)
+from .tcp_client import SELECTABLE_SOURCES, ArcamTcpClient, ArcamTcpError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,18 +41,37 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the media player entity from a config entry."""
-    client: ArcamRadiaClient = hass.data[DOMAIN][entry.entry_id]
+    data = hass.data[DOMAIN][entry.entry_id]
+    client: ArcamRadiaClient = data["api"]
+    tcp_client: ArcamTcpClient = data["tcp"]
     max_volume = entry.options.get(
         CONF_MAX_VOLUME, entry.data.get(CONF_MAX_VOLUME, DEFAULT_MAX_VOLUME)
     )
-    async_add_entities([ArcamRadiaMediaPlayer(client, entry, max_volume)], True)
+    keep_awake = entry.options.get(
+        CONF_KEEP_AWAKE, entry.data.get(CONF_KEEP_AWAKE, DEFAULT_KEEP_AWAKE)
+    )
+    async_add_entities(
+        [
+            ArcamRadiaMediaPlayer(
+                client,
+                tcp_client,
+                entry,
+                max_volume,
+                data.get("model_name"),
+                data.get("sw_version"),
+                keep_awake,
+            )
+        ],
+        True,
+    )
 
 
 class ArcamRadiaMediaPlayer(MediaPlayerEntity):
-    """Representation of an Arcam Radia amp (power/volume/mute only).
+    """Representation of an Arcam Radia amp.
 
-    Input/source switching is not exposed by the amp's local API and is
-    not supported by this integration - use an IR blaster for that.
+    Power/volume/mute/metadata are handled via the amp's HTTPS JSON API.
+    Input/source selection is handled via the documented binary protocol
+    on TCP port 50000, since the JSON API doesn't expose it.
     """
 
     _attr_has_entity_name = True
@@ -61,22 +87,35 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
         | MediaPlayerEntityFeature.NEXT_TRACK
         | MediaPlayerEntityFeature.PREVIOUS_TRACK
         | MediaPlayerEntityFeature.SEEK
+        | MediaPlayerEntityFeature.SELECT_SOURCE
     )
     _attr_should_poll = True
+    _attr_source_list = SELECTABLE_SOURCES
 
     def __init__(
-        self, client: ArcamRadiaClient, entry: ConfigEntry, max_volume: int
+        self,
+        client: ArcamRadiaClient,
+        tcp_client: ArcamTcpClient,
+        entry: ConfigEntry,
+        max_volume: int,
+        model_name: str | None = None,
+        sw_version: str | None = None,
+        keep_awake: bool = False,
     ) -> None:
         self._client = client
+        self._tcp_client = tcp_client
         self._max_volume = max_volume or DEFAULT_MAX_VOLUME
+        self._keep_awake = keep_awake
         self._attr_unique_id = f"{entry.entry_id}_media_player"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="Arcam Radia",
             manufacturer="Arcam",
-            model="Radia (SA35/SA45/ST25)",
+            model=model_name or "Radia (SA35/SA45/ST25)",
+            sw_version=sw_version,
         )
         self._attr_available = False
+        self._attr_source = None
 
     async def async_update(self) -> None:
         """Poll the amp for current power/volume/mute/now-playing state."""
@@ -84,6 +123,15 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
             power_target = await self._client.get_power_state()
             is_on = power_target == POWER_ON
             self._attr_state = MediaPlayerState.ON if is_on else MediaPlayerState.OFF
+
+            # If keep-awake is enabled, send a heartbeat to reset the amp's
+            # auto-standby timer - but only while it's already on, so we
+            # never wake a sleeping amp.
+            if self._keep_awake and is_on:
+                try:
+                    await self._tcp_client.send_heartbeat()
+                except ArcamTcpError as err:
+                    _LOGGER.debug("Heartbeat failed: %s", err)
 
             raw_volume = await self._client.get_volume()
             self._attr_volume_level = max(0.0, min(1.0, raw_volume / self._max_volume))
@@ -100,6 +148,16 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
             self._attr_media_position = None
             self._attr_media_position_updated_at = None
             self._attr_app_name = None
+
+            # Read current input from the port-50000 protocol. This is a
+            # separate TCP call and can fail independently of the JSON API,
+            # so it's wrapped so it never breaks the rest of the update.
+            try:
+                current_source = await self._tcp_client.get_current_input()
+                if current_source is not None:
+                    self._attr_source = current_source
+            except ArcamTcpError as err:
+                _LOGGER.debug("Could not read current input: %s", err)
 
             if is_on:
                 try:
@@ -184,3 +242,10 @@ class ArcamRadiaMediaPlayer(MediaPlayerEntity):
         await self._client.seek_to(position_ms)
         self._attr_media_position = int(position)
         self._attr_media_position_updated_at = dt_util.utcnow()
+
+    async def async_select_source(self, source: str) -> None:
+        try:
+            await self._tcp_client.set_input(source)
+            self._attr_source = source
+        except ArcamTcpError as err:
+            _LOGGER.error("Failed to switch input to %s: %s", source, err)
