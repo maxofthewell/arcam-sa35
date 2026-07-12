@@ -7,7 +7,12 @@ amp's own web control page at `https://<amp-ip>/webclient/`).
 
 ## What this supports
 
-- **Power** (on / network standby)
+- **Power** (on / standby) - uses the documented binary protocol on port
+  50000, which is more reliable than the JSON API for power control. Your
+  amp keeps its network alive in standby, so power-on over the network
+  works. (If a future firmware or a different unit closes the network
+  port in standby, power-on may require a "network standby" setting in
+  the amp's menu.)
 - **Volume** - absolute set, plus volume up/down stepping
 - **Mute / unmute**
 - **Now playing metadata** - track title, artist, album, album art,
